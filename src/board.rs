@@ -3,6 +3,14 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io;
 
+fn create_constraint_list(num: usize) -> Vec<ConstraintList> {
+    let mut v = Vec::with_capacity(num);
+    for _ in 0..num {
+        v.push(Vec::new());
+    }
+    v
+}
+
 /**
  * Remember, and do not forget:
  * Ordering should always be (x, y)!
@@ -96,17 +104,44 @@ pub trait LineRef {
     fn get_cell(&self, index: Unit) -> Cell;
     /// Get this line's list of constraints
     fn get_constraints(&self) -> &ConstraintList;
-    // /// Determine whether this line is solvable given its constraints
-    // fn is_solvable(&self) -> bool {
-    //     let c = self.get_constraints();
-    //     unimplemented!()
-    // }
+    /// Returns true if all cells are filled
+    fn is_completed(&self) -> bool {
+        (0..self.size()).map(|i| self.get_cell(i)).all(|v| v != Cell::Unknown)
+    }
+    /// Generate a StandaloneLine clone based on this Line
     fn create_standalone_line(&self) -> StandaloneLine {
         StandaloneLine {
             constraints: self.get_constraints(),
             data: (0..self.size()).map(|i| self.get_cell(i)).collect(),
         }
     }
+    /// Generate a list of constraints based on this Line
+    fn generate_new_constraints(&self) -> Option<ConstraintList> {
+        if !self.is_completed() {
+            None
+        } else {
+            let mut n = 0;
+            let mut ret = Vec::new();
+            for i in 0..self.size() {
+                let cell = self.get_cell(i);
+                if cell == Cell::Filled {
+                    n += 1
+                } else if n > 0 {
+                    ret.push(Constraint::new(n));
+                    n = 0
+                }
+            }
+            if n > 0 {
+                ret.push(Constraint::new(n));
+            }
+            Some(ret)
+        }
+    }
+    // /// Determine whether this line is solvable given its constraints
+    // fn is_solvable(&self) -> bool {
+    //     let c = self.get_constraints();
+    //     unimplemented!()
+    // }
 }
 
 /// A full nonogram board state.
@@ -137,8 +172,8 @@ impl Board {
             width,
             height,
             cells: vec![value; width as usize * height as usize],
-            row_constraints: Vec::new(),
-            col_constraints: Vec::new(),
+            row_constraints: create_constraint_list(height as usize),
+            col_constraints: create_constraint_list(width as usize),
         }
     }
 
@@ -201,14 +236,17 @@ impl Board {
             if width as usize * height as usize != cells.len() {
                 panic!("Size mis-match");
             }
-            Board {
+            let mut board = Board {
                 width,
                 height,
                 cells,
-                row_constraints: Vec::new(),
-                col_constraints: Vec::new(),
-            }
+                row_constraints: create_constraint_list(height as usize),
+                col_constraints: create_constraint_list(width as usize),
+            };
+            board.generate_new_constraints();
+            board
         } else {
+            println!("Loaded empty :(");
             Board::new_empty()
         }
     }
@@ -322,6 +360,16 @@ impl Board {
             .map(|x| x.len())
             .max()
             .unwrap_or(0)
+    }
+
+    /// Generate new constraints
+    fn generate_new_constraints(&mut self) {
+        for col in 0..self.width {
+            self.col_constraints[col as usize] = self.get_col_ref(col).generate_new_constraints().unwrap();
+        }
+        for row in 0..self.height {
+            self.row_constraints[row as usize] = self.get_row_ref(row).generate_new_constraints().unwrap();
+        }
     }
 }
 
