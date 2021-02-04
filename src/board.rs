@@ -8,14 +8,23 @@ use std::io;
  * This means (width, height) and (column, row)!
  */
 
+/// A single Cell.
+/// Can either be empty, filled, or undetermined.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Cell {
+    /// An undetermined Cell
     Unknown,
+    /// An empty Cell
     Empty,
+    /// A filled Cell
     Filled,
 }
 
 impl Cell {
+    /// Convert an int to a Cell.
+    /// 0 represents an empty Cell,
+    /// 1 represents a filled Cell
+    /// -1 represents an undetermined cell
     pub fn from_i64(value: i64) -> Option<Cell> {
         match value {
             0 => Some(Cell::Empty),
@@ -25,6 +34,7 @@ impl Cell {
         }
     }
 
+    /// Convert this Cell to an integer.
     pub fn to_i64(&self) -> i64 {
         match *self {
             Cell::Empty => 0,
@@ -48,34 +58,57 @@ impl fmt::Display for Cell {
     }
 }
 
+/// A type used to represent lengths on a board.
+/// This includes the board's size, and constraint lengths.
 type Unit = u16;
 
+/// A single Constraint (or hint) for the board.
 pub struct Constraint {
     length: Unit,
 }
 
 impl Constraint {
+    /// Create a new constraint with the given length
     pub fn new(value: Unit) -> Constraint {
         Constraint { length: value }
     }
-
+    /// Get this constraint's length
     pub fn get_length(&self) -> Unit {
         self.length
     }
 }
 
+/// A type used to represent a list of constraints on a row or column
 pub type ConstraintList = Vec<Constraint>;
 
+/// A mutable reference on a board's row or column
 pub trait LineMut {
+    /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
 }
 
+/// A reference on a board's row or column
 pub trait LineRef {
+    /// Get the length of this line
     fn size(&self) -> Unit;
+    /// Get a cell value from this line
     fn get_cell(&self, index: Unit) -> Cell;
+    /// Get this line's list of constraints
     fn get_constraints(&self) -> &ConstraintList;
+    // /// Determine whether this line is solvable given its constraints
+    // fn is_solvable(&self) -> bool {
+    //     let c = self.get_constraints();
+    //     unimplemented!()
+    // }
+    fn create_standalone_line(&self) -> StandaloneLine {
+        StandaloneLine {
+            constraints: self.get_constraints(),
+            data: (0..self.size()).map(|i| self.get_cell(i)).collect(),
+        }
+    }
 }
 
+/// A full nonogram board state.
 pub struct Board {
     width: Unit,
     height: Unit,
@@ -85,6 +118,7 @@ pub struct Board {
 }
 
 impl Board {
+    /// Construct an empty board
     pub fn new_empty() -> Board {
         Board {
             width: 0,
@@ -95,6 +129,8 @@ impl Board {
         }
     }
 
+    /// Construct a board with the given width and height,
+    /// with all cells initialized to the given Cell value.
     pub fn new_filled(width: Unit, height: Unit, value: Cell) -> Board {
         Board {
             width,
@@ -105,6 +141,7 @@ impl Board {
         }
     }
 
+    /// Read a puzzle file
     pub fn read_csv_puzzle<R: io::BufRead>(handle: R) -> Board {
         let mut cols = Vec::<ConstraintList>::new();
         let mut rows = Vec::<ConstraintList>::new();
@@ -137,6 +174,7 @@ impl Board {
         }
     }
 
+    /// Read a solution file
     pub fn read_csv_solution<R: io::Read>(handle: R) -> Board {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
@@ -174,39 +212,48 @@ impl Board {
         }
     }
 
+    /// Get this board's width
     pub fn get_width(&self) -> Unit {
         self.width
     }
 
+    /// Get this board's height
     pub fn get_height(&self) -> Unit {
         self.height
     }
 
+    /// Get this board's size (width, height)
     pub fn get_size(&self) -> (Unit, Unit) {
         (self.width, self.height)
     }
 
+    /// Convert a column/row pair to an index
     pub fn get_index(&self, col: Unit, row: Unit) -> usize {
         (col as usize) + (row as usize) * (self.width as usize)
     }
 
+    /// Get the cell at the given column/row
     pub fn get_cell(&self, col: Unit, row: Unit) -> Cell {
         self.cells[self.get_index(col, row)]
     }
 
+    /// Set the cell at the given column/row
     pub fn set_cell(&mut self, col: Unit, row: Unit, value: Cell) {
         let index = self.get_index(col, row);
         self.cells[index] = value;
     }
 
+    /// Get the constraints for the given row
     pub fn get_row_constraints(&self, row: Unit) -> &ConstraintList {
         &self.row_constraints[row as usize]
     }
 
+    /// Get the constraints for the given column
     pub fn get_col_constraints(&self, col: Unit) -> &ConstraintList {
         &self.col_constraints[col as usize]
     }
 
+    /// Get a mutable reference to a row from this board
     pub fn get_row_mut(&mut self, row: Unit) -> BoardRowMut {
         BoardRowMut {
             board: self,
@@ -214,6 +261,7 @@ impl Board {
         }
     }
 
+    /// Get a mutable reference to a column from this board
     pub fn get_col_mut(&mut self, col: Unit) -> BoardColMut {
         BoardColMut {
             board: self,
@@ -221,6 +269,7 @@ impl Board {
         }
     }
 
+    /// Get a reference to a row from this board
     pub fn get_row_ref(&self, row: Unit) -> BoardRowRef {
         BoardRowRef {
             board: self,
@@ -228,6 +277,7 @@ impl Board {
         }
     }
 
+    /// Get a reference to a column from this board
     pub fn get_col_ref(&self, col: Unit) -> BoardColRef {
         BoardColRef {
             board: self,
@@ -235,6 +285,7 @@ impl Board {
         }
     }
 
+    /// Get the largest row constraint in all of this board's row constraints
     fn get_largest_row_constraint(&self) -> Unit {
         self.row_constraints
             .iter()
@@ -244,6 +295,7 @@ impl Board {
             .unwrap_or(0)
     }
 
+    /// Get the largest column constraint in all of this board's column constraints
     fn get_largest_col_constraint(&self) -> Unit {
         self.col_constraints
             .iter()
@@ -253,6 +305,7 @@ impl Board {
             .unwrap_or(0)
     }
 
+    /// Get the maximum number of constraints on any row
     fn get_max_row_constraints(&self) -> usize {
         self.row_constraints
             .iter()
@@ -260,6 +313,8 @@ impl Board {
             .max()
             .unwrap_or(0)
     }
+
+    /// Get the maximum number of constraints on any column
     fn get_max_col_constraints(&self) -> usize {
         self.col_constraints
             .iter()
@@ -269,6 +324,7 @@ impl Board {
     }
 }
 
+/// Get the number of columns that it would take to print the given integer
 fn get_print_width(value: Unit) -> usize {
     if value < 10 {
         1
@@ -351,11 +407,13 @@ impl fmt::Display for Board {
     }
 }
 
+/// A reference to a board's row
 pub struct BoardRowRef<'a> {
     board: &'a Board,
     row: Unit,
 }
 
+/// A mutable reference to a board's row
 pub struct BoardRowMut<'a> {
     board: &'a mut Board,
     row: Unit,
@@ -404,11 +462,13 @@ impl<'a> LineMut for BoardRowMut<'a> {
     }
 }
 
+/// A reference to a board's column
 pub struct BoardColRef<'a> {
     board: &'a Board,
     col: Unit,
 }
 
+/// A mutable reference to a board's column
 pub struct BoardColMut<'a> {
     board: &'a mut Board,
     col: Unit,
@@ -454,5 +514,31 @@ impl<'a> LineRef for BoardColRef<'a> {
 impl<'a> LineMut for BoardColMut<'a> {
     fn set_cell(&mut self, row: Unit, value: Cell) {
         self.board.set_cell(self.col, row, value)
+    }
+}
+
+/// A line that is not part of a board
+pub struct StandaloneLine<'a> {
+    constraints: &'a ConstraintList,
+    data: Vec<Cell>,
+}
+
+impl<'a> LineRef for StandaloneLine<'a> {
+    fn size(&self) -> Unit {
+        self.data.len() as Unit
+    }
+
+    fn get_cell(&self, row: Unit) -> Cell {
+        self.data[row as usize]
+    }
+
+    fn get_constraints(&self) -> &ConstraintList {
+        self.constraints
+    }
+}
+
+impl<'a> LineMut for StandaloneLine<'a> {
+    fn set_cell(&mut self, row: Unit, value: Cell) {
+        self.data[row as usize] = value;
     }
 }
