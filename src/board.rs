@@ -1,5 +1,5 @@
-use std::fmt;
 use csv;
+use std::fmt;
 use std::io;
 
 /**
@@ -12,7 +12,7 @@ use std::io;
 pub enum Cell {
     Unknown,
     Empty,
-    Filled
+    Filled,
 }
 
 impl Cell {
@@ -21,7 +21,7 @@ impl Cell {
             0 => Some(Cell::Empty),
             1 => Some(Cell::Filled),
             -1 => Some(Cell::Unknown),
-            _ => None
+            _ => None,
         }
     }
 
@@ -36,25 +36,27 @@ impl Cell {
 
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match *self {
-            Cell::Unknown => "?",
-            Cell::Empty => ".",
-            Cell::Filled => "X"
-        })
+        write!(
+            f,
+            "{}",
+            match *self {
+                Cell::Unknown => "?",
+                Cell::Empty => ".",
+                Cell::Filled => "X",
+            }
+        )
     }
 }
 
 type Unit = u16;
 
 pub struct Constraint {
-    length: Unit
+    length: Unit,
 }
 
 impl Constraint {
     pub fn new(value: Unit) -> Constraint {
-        Constraint {
-            length: value
-        }
+        Constraint { length: value }
     }
 
     pub fn get_length(&self) -> Unit {
@@ -79,7 +81,7 @@ pub struct Board {
     height: Unit,
     cells: Vec<Cell>,
     row_constraints: Vec<ConstraintList>,
-    col_constraints: Vec<ConstraintList>
+    col_constraints: Vec<ConstraintList>,
 }
 
 impl Board {
@@ -131,7 +133,7 @@ impl Board {
             height: rows.len() as Unit,
             cells: vec![Cell::Unknown; cols.len() * rows.len()],
             col_constraints: cols,
-            row_constraints: rows
+            row_constraints: rows,
         }
     }
 
@@ -208,28 +210,28 @@ impl Board {
     pub fn get_row_mut(&mut self, row: Unit) -> BoardRowMut {
         BoardRowMut {
             board: self,
-            row: row
+            row: row,
         }
     }
 
     pub fn get_col_mut(&mut self, col: Unit) -> BoardColMut {
         BoardColMut {
             board: self,
-            col: col
+            col: col,
         }
     }
 
     pub fn get_row_ref(&self, row: Unit) -> BoardRowRef {
         BoardRowRef {
             board: self,
-            row: row
+            row: row,
         }
     }
 
     pub fn get_col_ref(&self, col: Unit) -> BoardColRef {
         BoardColRef {
             board: self,
-            col: col
+            col: col,
         }
     }
 
@@ -286,21 +288,37 @@ impl fmt::Display for Board {
         // print col constraints
         for i in 0..num_col_items {
             // print padding
-            write!(f, "{:width$}| ", "", width=(row_item_width+1)*num_row_items)?;
+            write!(
+                f,
+                "{:width$}| ",
+                "",
+                width = (row_item_width + 1) * num_row_items
+            )?;
             for col in 0..self.width {
                 let cols = self.get_col_constraints(col);
                 let colskip = num_col_items - cols.len();
                 if i + 1 > colskip {
-                    write!(f, "{:width$} ", cols[i - colskip].get_length(), width=col_item_width)?;
+                    write!(
+                        f,
+                        "{:width$} ",
+                        cols[i - colskip].get_length(),
+                        width = col_item_width
+                    )?;
                 } else {
-                    write!(f, "{:width$} ", "", width=col_item_width)?;
+                    write!(f, "{:width$} ", "", width = col_item_width)?;
                 }
             }
             // print newline
             write!(f, "\n")?;
         }
 
-        write!(f, "{0:-<width$}+{0:-<width2$}\n", "", width=(row_item_width+1)*num_row_items, width2=(col_item_width+1)*self.col_constraints.len())?;
+        write!(
+            f,
+            "{0:-<width$}+{0:-<width2$}\n",
+            "",
+            width = (row_item_width + 1) * num_row_items,
+            width2 = (col_item_width + 1) * self.col_constraints.len()
+        )?;
         // print cells + row constraints
         for row in 0..self.height {
             // print row constraints before for each row
@@ -308,14 +326,24 @@ impl fmt::Display for Board {
             let rowskip = num_row_items - rows.len();
             for i in 0..num_row_items {
                 if i + 1 > rowskip {
-                    write!(f, "{:width$} ", rows[i - rowskip].get_length(), width=row_item_width)?;
+                    write!(
+                        f,
+                        "{:width$} ",
+                        rows[i - rowskip].get_length(),
+                        width = row_item_width
+                    )?;
                 } else {
-                    write!(f, "{:width$} ", "", width=row_item_width)?;
+                    write!(f, "{:width$} ", "", width = row_item_width)?;
                 }
             }
             write!(f, "| ")?;
             for col in 0..self.width {
-                write!(f, "{:width$} ", self.get_cell(col, row), width=col_item_width)?;
+                write!(
+                    f,
+                    "{:width$} ",
+                    self.get_cell(col, row),
+                    width = col_item_width
+                )?;
             }
             write!(f, "\n")?;
         }
@@ -325,19 +353,19 @@ impl fmt::Display for Board {
 
 pub struct BoardRowRef<'a> {
     board: &'a Board,
-    row: Unit
+    row: Unit,
 }
 
 pub struct BoardRowMut<'a> {
     board: &'a mut Board,
-    row: Unit
+    row: Unit,
 }
 
 impl<'a> BoardRowMut<'a> {
     pub fn as_ref(&self) -> BoardRowRef {
         BoardRowRef {
             board: self.board,
-            row: self.row
+            row: self.row,
         }
     }
 }
@@ -378,19 +406,19 @@ impl<'a> LineMut for BoardRowMut<'a> {
 
 pub struct BoardColRef<'a> {
     board: &'a Board,
-    col: Unit
+    col: Unit,
 }
 
 pub struct BoardColMut<'a> {
     board: &'a mut Board,
-    col: Unit
+    col: Unit,
 }
 
 impl<'a> BoardColMut<'a> {
     pub fn as_ref(&self) -> BoardColRef {
         BoardColRef {
             board: self.board,
-            col: self.col
+            col: self.col,
         }
     }
 }
