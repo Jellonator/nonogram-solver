@@ -1,5 +1,6 @@
 use csv;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io;
 
 /**
@@ -542,3 +543,33 @@ impl<'a> LineMut for StandaloneLine<'a> {
         self.data[row as usize] = value;
     }
 }
+
+impl Hash for Board {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for chunk in self.cells.chunks(32) {
+            let mut v = 0u64;
+            for value in chunk {
+                v <<= 2;
+                v += match value {
+                    Cell::Empty => 0,
+                    Cell::Filled => 1,
+                    Cell::Unknown => 2,
+                };
+            }
+            state.write_u64(v);
+        }
+    }
+}
+
+impl PartialEq for Board {
+    fn eq(&self, other: &Self) -> bool {
+        if self.width != other.width || self.height != other.height {
+            false
+        } else {
+            // note: does not consider constraints
+            self.cells.iter().zip(&other.cells).all(|(a, b)| a.eq(b))
+        }
+    }
+}
+
+impl Eq for Board {}
