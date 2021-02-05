@@ -73,7 +73,7 @@ impl fmt::Display for Cell {
             f,
             "{}",
             match *self {
-                Cell::Unknown => "?",
+                Cell::Unknown => "\x1B[41m \x1B[0m",
                 Cell::Empty => ".",
                 Cell::Filled => "X",
             }
@@ -83,7 +83,7 @@ impl fmt::Display for Cell {
 
 /// A type used to represent lengths on a board.
 /// This includes the board's size, and constraint lengths.
-type Unit = u16;
+pub type Unit = u16;
 
 /// A single Constraint (or hint) for the board.
 pub struct Constraint {
@@ -204,18 +204,19 @@ pub trait LineRef : fmt::Display {
     /// Determine whether this line is solvable given its constraints
     fn is_solvable(&self) -> bool {
         let c = self.get_constraints();
-        // let num_gaps = c.len() + 1;
+        // special case: no constraints
+        if c.len() == 0 {
+            return (0..self.size()).all(|i| self.get_cell(i) != Cell::Filled);
+        }
         let c_sum: usize = c.iter().map(|x| x.get_length() as usize).sum();
-        let extra_space = self.size() as usize - c_sum - c.len() + 1;
-        // let num_nodes_sqrt = extra_space + 1;
+        let extra_space = self.size() as usize + 1 - c_sum - c.len();
         let num_nodes_width = c.len();
         let num_nodes_height = extra_space + 1;
+        let num_edge_lists = c.len() - 1;
         // For each node nodes[i, j]:
         // [i] is the constraint index
         // [j] is the permutation
-        // let mut nodes = util::NodeList2D::<bool>::new(num_nodes_sqrt);
         let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
-        let num_edge_lists = c.len() - 1;
         // For each edge list edges[i][j, k]:
         // Represents edge from A[i, j] to A[i+1, k] where k >= j
         let mut edgelists = Vec::new();
@@ -269,7 +270,7 @@ pub trait LineRef : fmt::Display {
                         edgelists[i].set(
                             j,
                             k,
-                            (pos..width).all(|x| self.get_cell(x as Unit) != Cell::Filled),
+                            (pos..pos+width).all(|x| self.get_cell(x as Unit) != Cell::Filled),
                         );
                     }
                 }
@@ -349,8 +350,10 @@ impl Board {
                 break;
             } else {
                 let mut clist = ConstraintList::new();
-                for field in line.split(",") {
-                    clist.push(Constraint::new(field.parse::<Unit>().unwrap()));
+                if line != "" {
+                    for field in line.split(",") {
+                        clist.push(Constraint::new(field.parse::<Unit>().unwrap()));
+                    }
                 }
                 if is_cols {
                     cols.push(clist);
@@ -531,6 +534,17 @@ impl Board {
                 self.get_row_ref(row).generate_new_constraints().unwrap();
         }
     }
+
+    /// Create a clone without constraints
+    pub fn clone_without_constraints(&self) -> Board {
+        Board {
+            cells: self.cells.clone(),
+            width: self.width,
+            height: self.height,
+            row_constraints: create_constraint_list(self.height as usize),
+            col_constraints: create_constraint_list(self.width as usize),
+        }
+    }
 }
 
 /// Get the number of columns that it would take to print the given integer
@@ -603,10 +617,11 @@ impl fmt::Display for Board {
             }
             write!(f, "| ")?;
             for col in 0..self.width {
+                let q = format!("{}", self.get_cell(col, row));
                 write!(
                     f,
-                    "{:width$} ",
-                    self.get_cell(col, row),
+                    "{:>width$} ",
+                    q,
                     width = col_item_width
                 )?;
             }
