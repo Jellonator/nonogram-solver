@@ -33,7 +33,7 @@ fn get_constraint_bounds(ls: &ConstraintList, index: usize) -> (usize, usize) {
 
 /// A single Cell.
 /// Can either be empty, filled, or undetermined.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Cell {
     /// An undetermined Cell
     Unknown,
@@ -109,26 +109,30 @@ pub trait LineMut : LineRef {
     /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
     /// Solve by contradiction
-    fn try_solve_line(&mut self) -> usize {
-        let mut ret = 0;
+    /// Returns None if a contradiction was found
+    /// Returns Some(Vec<Unit>) with a list of cells that were modified
+    fn try_solve_line(&mut self) -> Option<Vec<Unit>> {
+        let mut ret = Vec::new();
         for i in 0..self.size() {
             if self.get_cell(i) == Cell::Unknown {
                 self.set_cell(i, Cell::Filled);
-                if !self.is_solvable() {
-                    self.set_cell(i, Cell::Empty);
-                    ret += 1;
-                    continue;
-                }
+                let can_solve_filled = self.is_solvable();
                 self.set_cell(i, Cell::Empty);
-                if !self.is_solvable() {
+                let can_solve_empty = self.is_solvable();
+                if can_solve_filled && !can_solve_empty {
                     self.set_cell(i, Cell::Filled);
-                    ret += 1;
-                    continue;
+                    ret.push(i);
+                } else if can_solve_empty && !can_solve_filled {
+                    self.set_cell(i, Cell::Empty); // (Unneeded, cell is already set to Empty)
+                    ret.push(i);
+                } else if !can_solve_empty && !can_solve_filled {
+                    return None;
+                } else {
+                    self.set_cell(i, Cell::Unknown);
                 }
-                self.set_cell(i, Cell::Unknown);
             }
         }
-        ret
+        Some(ret)
     }
 }
 
@@ -219,7 +223,7 @@ pub trait LineRef : fmt::Display {
         let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
         // For each edge list edges[i][j, k]:
         // Represents edge from A[i, j] to A[i+1, k] where k >= j
-        let mut edgelists = Vec::new();
+        let mut edgelists = Vec::with_capacity(num_edge_lists);
         for _ in 0..num_edge_lists {
             edgelists.push(util::EdgeList::<bool>::new(num_nodes_height));
         }
@@ -265,7 +269,7 @@ pub trait LineRef : fmt::Display {
                     } else {
                         // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
                         let (left, _right) = get_constraint_bounds(&c, i);
-                        let pos = left + i0_value + 1;
+                        let pos = left + i0_value + j + 1;
                         let width = k - j - 1;
                         edgelists[i].set(
                             j,
@@ -288,7 +292,6 @@ pub trait LineRef : fmt::Display {
             }
         }
         (0..num_nodes_height).any(|j| *nodelist.get(0, j))
-        // unimplemented!()
     }
 
     fn do_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
