@@ -1,3 +1,4 @@
+use crate::util;
 use csv;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -9,6 +10,19 @@ fn create_constraint_list(num: usize) -> Vec<ConstraintList> {
         v.push(Vec::new());
     }
     v
+}
+
+fn get_constraint_bounds(ls: &ConstraintList, index: usize) -> (usize, usize) {
+    let mut left = index;
+    let mut right = ls.len() - index - 1;
+    for (i, value) in ls.iter().enumerate() {
+        if i < index {
+            left += value.get_length() as usize;
+        } else if i > index {
+            right += value.get_length() as usize;
+        }
+    }
+    (left, right)
 }
 
 /**
@@ -91,13 +105,35 @@ impl Constraint {
 pub type ConstraintList = Vec<Constraint>;
 
 /// A mutable reference on a board's row or column
-pub trait LineMut {
+pub trait LineMut : LineRef {
     /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
+    /// Solve by contradiction
+    fn try_solve_line(&mut self) -> usize {
+        let mut ret = 0;
+        for i in 0..self.size() {
+            if self.get_cell(i) == Cell::Unknown {
+                self.set_cell(i, Cell::Filled);
+                if !self.is_solvable() {
+                    self.set_cell(i, Cell::Empty);
+                    ret += 1;
+                    continue;
+                }
+                self.set_cell(i, Cell::Empty);
+                if !self.is_solvable() {
+                    self.set_cell(i, Cell::Filled);
+                    ret += 1;
+                    continue;
+                }
+                self.set_cell(i, Cell::Unknown);
+            }
+        }
+        ret
+    }
 }
 
 /// A reference on a board's row or column
-pub trait LineRef {
+pub trait LineRef : fmt::Display {
     /// Get the length of this line
     fn size(&self) -> Unit;
     /// Get a cell value from this line
@@ -106,7 +142,9 @@ pub trait LineRef {
     fn get_constraints(&self) -> &ConstraintList;
     /// Returns true if all cells are filled
     fn is_completed(&self) -> bool {
-        (0..self.size()).map(|i| self.get_cell(i)).all(|v| v != Cell::Unknown)
+        (0..self.size())
+            .map(|i| self.get_cell(i))
+            .all(|v| v != Cell::Unknown)
     }
     /// Generate a StandaloneLine clone based on this Line
     fn create_standalone_line(&self) -> StandaloneLine {
@@ -137,11 +175,131 @@ pub trait LineRef {
             Some(ret)
         }
     }
-    // /// Determine whether this line is solvable given its constraints
-    // fn is_solvable(&self) -> bool {
-    //     let c = self.get_constraints();
-    //     unimplemented!()
-    // }
+    /// Determine if a string of 1's with 0's on either side can be fit in the given position
+    fn can_fit_constraint(&self, pos: Unit, len: Unit) -> bool {
+        #[allow(unused_comparisons)]
+        if pos < 0 || pos + len > self.size() {
+            panic!("OOB???? {}:{} [{}]", pos, len, self.size())
+        }
+        // Check left side
+        if pos > 0 {
+            if self.get_cell(pos - 1) == Cell::Filled {
+                return false;
+            }
+        }
+        // Check right side
+        if pos + len < self.size() {
+            if self.get_cell(pos + len) == Cell::Filled {
+                return false;
+            }
+        }
+        // check inner cells
+        for i in pos..(pos+len) {
+            if self.get_cell(i) == Cell::Empty {
+                return false;
+            }
+        }
+        return true;
+    }
+    /// Determine whether this line is solvable given its constraints
+    fn is_solvable(&self) -> bool {
+        let c = self.get_constraints();
+        // let num_gaps = c.len() + 1;
+        let c_sum: usize = c.iter().map(|x| x.get_length() as usize).sum();
+        let extra_space = self.size() as usize - c_sum - c.len() + 1;
+        // let num_nodes_sqrt = extra_space + 1;
+        let num_nodes_width = c.len();
+        let num_nodes_height = extra_space + 1;
+        // For each node nodes[i, j]:
+        // [i] is the constraint index
+        // [j] is the permutation
+        // let mut nodes = util::NodeList2D::<bool>::new(num_nodes_sqrt);
+        let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
+        let num_edge_lists = c.len() - 1;
+        // For each edge list edges[i][j, k]:
+        // Represents edge from A[i, j] to A[i+1, k] where k >= j
+        let mut edgelists = Vec::new();
+        for _ in 0..num_edge_lists {
+            edgelists.push(util::EdgeList::<bool>::new(num_nodes_height));
+        }
+        // Determine viability of each node
+        for i in 0..num_nodes_width {
+            let (left, _right) = get_constraint_bounds(&c, i);
+            let value = c[i].get_length();
+            for j in 0..num_nodes_height {
+                let mut nodevalue = self.can_fit_constraint((left + j) as Unit, value);
+                // If first node, check that everything to left can be 0
+                if nodevalue && i == 0 && j > 1 {
+                    for q in 0..(j-1) {
+                        if self.get_cell(q as Unit) == Cell::Filled {
+                            nodevalue = false;
+                            break;
+                        }
+                    }
+                }
+                // If last node, check that everything to right can be 0
+                if nodevalue && i == num_nodes_width-1 && j+2 < num_nodes_height {
+                    for q in (self.size() as usize-num_nodes_height+j+2)..self.size() as usize {
+                        if self.get_cell(q as Unit) == Cell::Filled {
+                            nodevalue = false;
+                            break;
+                        }
+                    }
+                }
+                // set value
+                nodelist.set(i, j, nodevalue);
+            }
+        }
+        // Determine viability of each edge
+        for i in 0..num_edge_lists {
+            let i0_value = c[i].get_length() as usize;
+            // let i2 = i1 + 1;
+            // from A[i,j] to A[i+1,k] where k >= j
+            for j in 0..num_nodes_height {
+                for k in j..num_nodes_height {
+                    if k <= j + 1 {
+                        // if no separation, always true
+                        // (verified by node truth value)
+                        edgelists[i].set(j, k, true);
+                    } else {
+                        // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
+                        let (left, _right) = get_constraint_bounds(&c, i);
+                        let pos = left + i0_value + 1;
+                        let width = k - j - 1;
+                        edgelists[i].set(
+                            j,
+                            k,
+                            (pos..width).all(|x| self.get_cell(x as Unit) != Cell::Filled),
+                        );
+                    }
+                }
+            }
+        }
+        // for each node:
+        // A[i,j] = A[i,j] && ∃ (edge[i,j,k] && A[i+1,k])
+        // Perform this in reverse order
+        // Skip nodes on bottom rung
+        for i in (0..num_nodes_width - 1).rev() {
+            for j in 0..num_nodes_height {
+                let pvalue = *nodelist.get(i, j);
+                let edgevalue = (j..num_nodes_height).any(|k| *edgelists[i].get(j, k) && *nodelist.get(i+1, k));
+                nodelist.set(i, j, pvalue && edgevalue);
+            }
+        }
+        (0..num_nodes_height).any(|j| *nodelist.get(0, j))
+        // unimplemented!()
+    }
+
+    fn do_fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for value in self.get_constraints() {
+            write!(f, "{} ", value.get_length())?;
+        }
+        write!(f, "| ")?;
+        for i in 0..self.size() {
+            write!(f, "{} ", self.get_cell(i))?;
+        }
+        Ok(())
+    }
 }
 
 /// A full nonogram board state.
@@ -365,10 +523,12 @@ impl Board {
     /// Generate new constraints
     fn generate_new_constraints(&mut self) {
         for col in 0..self.width {
-            self.col_constraints[col as usize] = self.get_col_ref(col).generate_new_constraints().unwrap();
+            self.col_constraints[col as usize] =
+                self.get_col_ref(col).generate_new_constraints().unwrap();
         }
         for row in 0..self.height {
-            self.row_constraints[row as usize] = self.get_row_ref(row).generate_new_constraints().unwrap();
+            self.row_constraints[row as usize] =
+                self.get_row_ref(row).generate_new_constraints().unwrap();
         }
     }
 }
@@ -572,6 +732,15 @@ pub struct StandaloneLine<'a> {
     data: Vec<Cell>,
 }
 
+impl<'a> StandaloneLine<'a> {
+    pub fn new(data: Vec<Cell>, constraints: &ConstraintList) -> StandaloneLine {
+        StandaloneLine {
+            constraints,
+            data
+        }
+    }
+}
+
 impl<'a> LineRef for StandaloneLine<'a> {
     fn size(&self) -> Unit {
         self.data.len() as Unit
@@ -621,3 +790,34 @@ impl PartialEq for Board {
 }
 
 impl Eq for Board {}
+
+impl<'a> fmt::Display for BoardColMut<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.do_fmt(f)
+    }
+}
+
+impl<'a> fmt::Display for BoardColRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.do_fmt(f)
+    }
+}
+
+impl<'a> fmt::Display for BoardRowMut<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.do_fmt(f)
+    }
+}
+
+impl<'a> fmt::Display for BoardRowRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.do_fmt(f)
+    }
+}
+
+impl<'a> fmt::Display for StandaloneLine<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.do_fmt(f)
+    }
+}
+
