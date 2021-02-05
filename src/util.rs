@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₙ
 /// A₂,₁ A₂,₂ … A₂,ₙ
@@ -32,6 +34,22 @@ impl<T> EdgeList<T> {
     }
 }
 
+impl<T> fmt::Display for EdgeList<T> where T: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for k in 0..self.size {
+            for j in 0..self.size {
+                if k >= j {
+                    write!(f, "{:>5} ", self.get(j, k))?;
+                } else {
+                    write!(f, "{:>5} ", "")?;
+                }
+            }
+            write!(f, "\n")?;
+        }
+        Ok(())
+    }
+}
+
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₘ
 /// A₂,₁ A₂,₂ … A₂,ₘ
@@ -40,7 +58,7 @@ impl<T> EdgeList<T> {
 pub struct NodeList<T> {
     items: Vec<T>,
     width: usize,
-    _height: usize
+    height: usize
 }
 
 impl<T> NodeList<T> {
@@ -50,7 +68,7 @@ impl<T> NodeList<T> {
     {
         NodeList {
             width,
-            _height: height,
+            height,
             items: vec![T::default(); width * height],
         }
     }
@@ -65,6 +83,18 @@ impl<T> NodeList<T> {
 
     pub fn set(&mut self, i: usize, j: usize, value: T) {
         self.items[i + j * self.width] = value;
+    }
+}
+
+impl<T> fmt::Display for NodeList<T> where T: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for j in 0..self.width {
+            for k in 0..self.height {
+                write!(f, "{:>5} ", self.get(j, k))?;
+            }
+            write!(f, "\n")?;
+        }
+        Ok(())
     }
 }
 

@@ -86,6 +86,7 @@ impl fmt::Display for Cell {
 pub type Unit = u16;
 
 /// A single Constraint (or hint) for the board.
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Constraint {
     length: Unit,
 }
@@ -307,6 +308,7 @@ pub trait LineRef : fmt::Display {
 }
 
 /// A full nonogram board state.
+#[derive(Clone)]
 pub struct Board {
     width: Unit,
     height: Unit,
@@ -430,6 +432,11 @@ impl Board {
         (self.width, self.height)
     }
 
+    /// Get the number of cells
+    pub fn get_num_cells(&self) -> usize {
+        (self.width as usize) * (self.height as usize)
+    }
+
     /// Convert a column/row pair to an index
     pub fn get_index(&self, col: Unit, row: Unit) -> usize {
         (col as usize) + (row as usize) * (self.width as usize)
@@ -443,6 +450,16 @@ impl Board {
     /// Set the cell at the given column/row
     pub fn set_cell(&mut self, col: Unit, row: Unit, value: Cell) {
         let index = self.get_index(col, row);
+        self.cells[index] = value;
+    }
+
+    /// Get the cell at the given index
+    pub fn get_cell_index(&self, index: usize) -> Cell {
+        self.cells[index]
+    }
+
+    /// Set the cell at the gien index
+    pub fn set_cell_index(&mut self, index: usize, value: Cell) {
         self.cells[index] = value;
     }
 
