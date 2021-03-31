@@ -1,3 +1,4 @@
+#![allow(unused_macros)]
 pub mod board;
 pub mod util;
 pub mod solver;
@@ -47,10 +48,6 @@ macro_rules! make_line {
 }
 
 fn main() {
-    use board::LineRef;
-    // use board::LineMut;
-    // println!("Hello, world!");
-    
     let puzzlef =
         fs::File::open("/home/jellonator/Workspace/Python/nonogram-solver/puzzles/436.puzzle")
             .unwrap();

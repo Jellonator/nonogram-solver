@@ -3,8 +3,10 @@ use std::fmt;
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₙ
 /// A₂,₁ A₂,₂ … A₂,ₙ
-/// ⋮   ⋮     ⋮
+/// ⋮    ⋮      ⋮
 /// Aₙ,₁ Aₙ,₂ … Aₙ,ₙ
+/// This is a square and not a triangle because trying to create a triangular
+/// data structure is hard, and probably not worth it
 pub struct EdgeList<T> {
     items: Vec<T>,
     size: usize,

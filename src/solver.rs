@@ -4,12 +4,12 @@ use std::mem;
 
 pub enum LineType {
     Row,
-    Column
+    Column,
 }
 
 pub struct LineInfo {
     pub index: board::Unit,
-    pub linetype: LineType
+    pub linetype: LineType,
 }
 
 /// Completely solving only has two possibilities:
@@ -17,7 +17,7 @@ pub struct LineInfo {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SolveResult {
     Success,
-    Contradiction
+    Contradiction,
 }
 
 /// Represents a Change
@@ -30,7 +30,7 @@ pub struct Change {
 
 /// A set of changes that have been made
 pub struct ChangeSet {
-    pub changes: HashSet<Change>
+    pub changes: HashSet<Change>,
 }
 
 /// A very basic test solving implementation.
@@ -42,7 +42,6 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
     use board::LineMut;
     use board::LineRef;
     let (width, height) = b.get_size();
-    // let mut tiles_to_solve = (width * height) as i64;
     let mut tiles_to_solve = 0;
     for i in 0..b.get_num_cells() {
         if b.get_cell_index(i) == board::Cell::Unknown {
@@ -54,7 +53,6 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
         solved_this_round = 0;
         for i in 0..width {
             let mut col = b.get_col_mut(i);
-            // let v = col.try_solve_line() as i64;
             if let Some(v) = col.try_solve_line() {
                 // check all rows for contradiction
                 for j in v.iter() {
@@ -69,14 +67,11 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
                 tiles_to_solve -= v.len() as i64;
             } else {
                 // contradiction found :(
-                return Some(SolveResult::Contradiction)
+                return Some(SolveResult::Contradiction);
             }
         }
         for i in 0..height {
             let mut row = b.get_row_mut(i);
-            // let v = row.try_solve_line() as i64;
-            // solved_this_round += v;
-            // tiles_to_solve -= v;
             if let Some(v) = row.try_solve_line() {
                 // check all rows for contradiction
                 for j in v.iter() {
@@ -91,7 +86,7 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
                 tiles_to_solve -= v.len() as i64;
             } else {
                 // contradiction found :(
-                return Some(SolveResult::Contradiction)
+                return Some(SolveResult::Contradiction);
             }
         }
     }
@@ -100,7 +95,6 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
     } else {
         None
     }
-    // println!("{} tiles remaining", tiles_to_solve);
 }
 
 /// A very basic solver that utilizes branching when no solution can be found.
@@ -117,7 +111,8 @@ pub fn stupid_branched_solver(b: &mut board::Board) -> SolveResult {
         }
         None => {
             // get first index that is unknown
-            let index = (0..b.get_num_cells()).find(|i| b.get_cell_index(*i) == board::Cell::Unknown);
+            let index = (0..b.get_num_cells())
+		.find(|i| b.get_cell_index(*i) == board::Cell::Unknown);
             if let Some(index) = index {
                 // First, try 0
                 let mut new_board = b.clone();
