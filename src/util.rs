@@ -1,4 +1,6 @@
 use std::fmt;
+use std::collections::BTreeMap;
+use std::cmp::Ordering;
 
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₙ
@@ -123,3 +125,52 @@ impl<T> fmt::Display for NodeList<T> where T: fmt::Display {
 //         }
 //     }
 // }
+
+#[derive(Clone)]
+pub struct PrioritySet<T>
+where T: Clone + PartialOrd + Ord + PartialEq + Eq
+{
+    pub elements: BTreeMap<T, u32>
+}
+
+impl<T> PrioritySet<T>
+where T: Clone + PartialOrd + Ord + PartialEq + Eq
+{
+    pub fn insert(&mut self, value: T) {
+        let entry = self.elements.entry(value).or_insert(0);
+        *entry += 1;
+    }
+
+    pub fn insert_with_priority(&mut self, value: T, p: u32) {
+        let entry = self.elements.entry(value).or_insert(0);
+        *entry = p;
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        // kinda inefficient since it's O(n), but what you gonna do about it
+        let index = self.elements.iter().max_by(|(ak, av), (bk, bv)| {
+            av.cmp(bv).then_with(|| ak.cmp(bk))
+        });
+        index.map(|i| i.0.clone()).map(|i| {
+            self.elements.remove(&i);
+            i
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn new() -> PrioritySet<T> {
+        PrioritySet {
+            elements: BTreeMap::new()
+        }
+    }
+}
+
+pub fn inc_maybe_print(value: &mut usize, amt: usize, step: usize) {
+    if (*value + amt) / step != *value / step {
+        println!("{}", *value + amt);
+    }
+    *value += amt;
+}

@@ -218,12 +218,12 @@ pub trait LineRef : fmt::Display {
         let num_nodes_width = c.len();
         let num_nodes_height = extra_space + 1;
         let num_edge_lists = c.len() - 1;
-        // For each node nodes[i, j]:
+        // For each node NODE[i, j]:
         // [i] is the constraint index
         // [j] is the permutation
         let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
-        // For each edge list edges[i][j, k]:
-        // Represents edge from A[i, j] to A[i+1, k] where k >= j
+        // For each edge list EDGE[i][j, k]:
+        // Represents edge from NODE[i, j] to NODE[i+1, k] where k >= j
         let mut edgelists = Vec::with_capacity(num_edge_lists);
         for _ in 0..num_edge_lists {
             edgelists.push(util::EdgeList::<bool>::new(num_nodes_height));
@@ -260,7 +260,7 @@ pub trait LineRef : fmt::Display {
         for i in 0..num_edge_lists {
             let i0_value = c[i].get_length() as usize;
             // let i2 = i1 + 1;
-            // from A[i,j] to A[i+1,k] where k >= j
+            // from NODE[i,j] to NODE[i+1,k] where k >= j
             for j in 0..num_nodes_height {
                 for k in j..num_nodes_height {
                     if k <= j + 1 {
@@ -282,7 +282,7 @@ pub trait LineRef : fmt::Display {
             }
         }
         // for each node:
-        // A[i,j] = A[i,j] && ∃ (edge[i,j,k] && A[i+1,k])
+        // NODE[i,j] = NODE[i,j] && ∃ (EDGE[i,j,k] && NODE[i+1,k])
         // Perform this in reverse order
         // Skip nodes on bottom rung
         for i in (0..num_nodes_width - 1).rev() {
@@ -440,6 +440,14 @@ impl Board {
     /// Convert a column/row pair to an index
     pub fn get_index(&self, col: Unit, row: Unit) -> usize {
         (col as usize) + (row as usize) * (self.width as usize)
+    }
+
+    /// Convert index to column/row pair
+    pub fn get_coordinate(&self, index: usize) -> (Unit, Unit) {
+        (
+            (index % (self.width as usize)) as Unit,
+            (index / (self.width as usize)) as Unit
+        )
     }
 
     /// Get the cell at the given column/row
