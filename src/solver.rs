@@ -90,7 +90,7 @@ pub fn stupid_solver_set(
                 }
                 let mut row = b.get_row_mut(lineid.index);
                 // solve this row
-                if let Some(v) = row.try_solve_line() {
+                if let Some(v) = row.try_solve_line_complete() {
                     // check that no columns are contradicted
                     for col_i in v.iter() {
                         let col = b.get_col_ref(*col_i);
@@ -117,7 +117,7 @@ pub fn stupid_solver_set(
                 }
                 let mut col = b.get_col_mut(lineid.index);
                 // solve this column
-                if let Some(v) = col.try_solve_line() {
+                if let Some(v) = col.try_solve_line_complete() {
                     // check that no rows are contradicted
                     for row_i in v.iter() {
                         let row = b.get_row_ref(*row_i);
@@ -169,7 +169,7 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
         solved_this_round = 0;
         for i in 0..width {
             let mut col = b.get_col_mut(i);
-            if let Some(v) = col.try_solve_line() {
+            if let Some(v) = col.try_solve_line_complete() {
                 // check all rows for contradiction
                 for j in v.iter() {
                     let row = b.get_row_ref(*j);
@@ -188,7 +188,7 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
         }
         for i in 0..height {
             let mut row = b.get_row_mut(i);
-            if let Some(v) = row.try_solve_line() {
+            if let Some(v) = row.try_solve_line_complete() {
                 // check all rows for contradiction
                 for j in v.iter() {
                     let col = b.get_col_ref(*j);

@@ -110,9 +110,10 @@ pub trait LineMut : LineRef {
     /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
     /// Solve by contradiction
+    /// Guarnatees that the line will be solved to its fullest extent
     /// Returns None if a contradiction was found
     /// Returns Some(Vec<Unit>) with a list of cells that were modified
-    fn try_solve_line(&mut self) -> Option<Vec<Unit>> {
+    fn try_solve_line_complete(&mut self) -> Option<Vec<Unit>> {
         let mut ret = Vec::new();
         for i in 0..self.size() {
             if self.get_cell(i) == Cell::Unknown {
@@ -137,8 +138,25 @@ pub trait LineMut : LineRef {
     }
 }
 
+fn determine_edge<T: LineRef>(i: usize, j: usize, k: usize, c: &ConstraintList, line: &T) -> bool {
+    let (left, _right) = get_constraint_bounds(&c, i);
+    let i0_value = c[i].get_length() as usize;
+    // let i2 = i1 + 1;
+    // from NODE[i,j] to NODE[i+1,k] where k >= j
+    let pos = left + i0_value + j + 1;
+    if k <= j + 1 {
+        // if no separation, always true
+        // (verified by node truth value)
+        true
+    } else {
+        // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
+        let width = k - j - 1;
+        (pos..pos+width).all(|x| line.get_cell(x as Unit) != Cell::Filled)
+    }
+}
+
 /// A reference on a board's row or column
-pub trait LineRef : fmt::Display {
+pub trait LineRef : fmt::Display + Sized {
     /// Get the length of this line
     fn size(&self) -> Unit;
     /// Get a cell value from this line
@@ -217,17 +235,10 @@ pub trait LineRef : fmt::Display {
         let extra_space = self.size() as usize + 1 - c_sum - c.len();
         let num_nodes_width = c.len();
         let num_nodes_height = extra_space + 1;
-        let num_edge_lists = c.len() - 1;
         // For each node NODE[i, j]:
         // [i] is the constraint index
         // [j] is the permutation
         let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
-        // For each edge list EDGE[i][j, k]:
-        // Represents edge from NODE[i, j] to NODE[i+1, k] where k >= j
-        let mut edgelists = Vec::with_capacity(num_edge_lists);
-        for _ in 0..num_edge_lists {
-            edgelists.push(util::EdgeList::<bool>::new(num_nodes_height));
-        }
         // Determine viability of each node
         for i in 0..num_nodes_width {
             let (left, _right) = get_constraint_bounds(&c, i);
@@ -256,31 +267,6 @@ pub trait LineRef : fmt::Display {
                 nodelist.set(i, j, nodevalue);
             }
         }
-        // Determine viability of each edge
-        for i in 0..num_edge_lists {
-            let i0_value = c[i].get_length() as usize;
-            // let i2 = i1 + 1;
-            // from NODE[i,j] to NODE[i+1,k] where k >= j
-            for j in 0..num_nodes_height {
-                for k in j..num_nodes_height {
-                    if k <= j + 1 {
-                        // if no separation, always true
-                        // (verified by node truth value)
-                        edgelists[i].set(j, k, true);
-                    } else {
-                        // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
-                        let (left, _right) = get_constraint_bounds(&c, i);
-                        let pos = left + i0_value + j + 1;
-                        let width = k - j - 1;
-                        edgelists[i].set(
-                            j,
-                            k,
-                            (pos..pos+width).all(|x| self.get_cell(x as Unit) != Cell::Filled),
-                        );
-                    }
-                }
-            }
-        }
         // for each node:
         // NODE[i,j] = NODE[i,j] && ∃ (EDGE[i,j,k] && NODE[i+1,k])
         // Perform this in reverse order
@@ -288,8 +274,25 @@ pub trait LineRef : fmt::Display {
         for i in (0..num_nodes_width - 1).rev() {
             for j in 0..num_nodes_height {
                 let pvalue = *nodelist.get(i, j);
-                let edgevalue = (j..num_nodes_height).any(|k| *edgelists[i].get(j, k) && *nodelist.get(i+1, k));
-                nodelist.set(i, j, pvalue && edgevalue);
+                if pvalue {
+                    let mut edgevalue = false;
+                    for k in j..num_nodes_height {
+                        if !*nodelist.get(i+1, k) {
+                            continue;
+                        }
+                        // determine viability of edge
+                        // For each edge list EDGE[i][j, k]:
+                        // Represents edge from NODE[i, j] to NODE[i+1, k] where k >= j
+                        let edgev = determine_edge(i, j, k, &c, self);
+                        if edgev {
+                            edgevalue = true;
+                            break;
+                        }
+                    }
+                    nodelist.set(i, j, edgevalue);
+                } else {
+                    nodelist.set(i, j, false);
+                }
             }
         }
         (0..num_nodes_height).any(|j| *nodelist.get(0, j))
