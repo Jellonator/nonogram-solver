@@ -73,11 +73,32 @@ impl BoardMeta {
     }
 }
 
+pub struct NodeListCache {
+    pub rows: Vec<util::NodeList<bool>>,
+    pub cols: Vec<util::NodeList<bool>>
+}
+
+fn make_node_list_cache(board: &board::Board) -> NodeListCache {
+    use board::LineRef;
+    let mut ret = NodeListCache {
+        rows: Vec::with_capacity(board.get_height() as usize),
+        cols: Vec::with_capacity(board.get_width() as usize),
+    };
+    for i in 0..board.get_width() {
+        ret.cols.push(board.get_col_ref(i).make_empty_node_list());
+    }
+    for i in 0..board.get_height() {
+        ret.rows.push(board.get_row_ref(i).make_empty_node_list());
+    }
+    ret
+}
+
 /// Slightly smarter version of stupid_solver.
 pub fn stupid_solver_set(
     b: &mut board::Board,
     meta: &mut BoardMeta,
-    to_solve: &mut PrioritySet<LineInfo>
+    to_solve: &mut PrioritySet<LineInfo>,
+    nodecache: &mut NodeListCache
 ) -> Option<SolveResult> {
     use board::LineMut;
     use board::LineRef;
@@ -90,11 +111,11 @@ pub fn stupid_solver_set(
                 }
                 let mut row = b.get_row_mut(lineid.index);
                 // solve this row
-                if let Some(v) = row.try_solve_line_complete() {
+                if let Some(v) = row.try_solve_line_complete(&mut nodecache.rows[lineid.index as usize]) {
                     // check that no columns are contradicted
                     for col_i in v.iter() {
                         let col = b.get_col_ref(*col_i);
-                        if !col.is_solvable() {
+                        if !col.is_solvable(&mut nodecache.cols[*col_i as usize]) {
                             return Some(SolveResult::Contradiction);
                         }
                         // mark this cell as solved
@@ -117,11 +138,11 @@ pub fn stupid_solver_set(
                 }
                 let mut col = b.get_col_mut(lineid.index);
                 // solve this column
-                if let Some(v) = col.try_solve_line_complete() {
+                if let Some(v) = col.try_solve_line_complete(&mut nodecache.cols[lineid.index as usize]) {
                     // check that no rows are contradicted
                     for row_i in v.iter() {
                         let row = b.get_row_ref(*row_i);
-                        if !row.is_solvable() {
+                        if !row.is_solvable(&mut nodecache.rows[*row_i as usize]) {
                             return Some(SolveResult::Contradiction);
                         }
                         meta.solve(lineid.index, *row_i);
@@ -154,7 +175,10 @@ pub fn stupid_solver_set(
 /// only performs line solving algorithm.
 /// Returns Some(SolveResult) if a success or contradiction was found;
 /// Returns None if the board is in an incomplete solving state.
-pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
+pub fn stupid_solver(
+    b: &mut board::Board,
+    nodecache: &mut NodeListCache
+) -> Option<SolveResult> {
     use board::LineMut;
     use board::LineRef;
     let (width, height) = b.get_size();
@@ -169,11 +193,11 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
         solved_this_round = 0;
         for i in 0..width {
             let mut col = b.get_col_mut(i);
-            if let Some(v) = col.try_solve_line_complete() {
+            if let Some(v) = col.try_solve_line_complete(&mut nodecache.cols[i as usize]) {
                 // check all rows for contradiction
                 for j in v.iter() {
                     let row = b.get_row_ref(*j);
-                    if !row.is_solvable() {
+                    if !row.is_solvable(&mut nodecache.rows[*j as usize]) {
                         // contradiction found :(
                         return Some(SolveResult::Contradiction);
                     }
@@ -188,11 +212,11 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
         }
         for i in 0..height {
             let mut row = b.get_row_mut(i);
-            if let Some(v) = row.try_solve_line_complete() {
+            if let Some(v) = row.try_solve_line_complete(&mut nodecache.rows[i as usize]) {
                 // check all rows for contradiction
                 for j in v.iter() {
                     let col = b.get_col_ref(*j);
-                    if !col.is_solvable() {
+                    if !col.is_solvable(&mut nodecache.cols[*j as usize]) {
                         // contradiction found :(
                         return Some(SolveResult::Contradiction);
                     }
@@ -216,9 +240,12 @@ pub fn stupid_solver(b: &mut board::Board) -> Option<SolveResult> {
 /// A very basic solver that utilizes branching when no solution can be found.
 /// Branches are just clones of the Board, which is inefficient.
 /// Will eventually arrive to a solution
-pub fn stupid_branched_solver(b: &mut board::Board) -> (SolveResult, usize) {
+pub fn stupid_branched_solver(
+    b: &mut board::Board,
+    nodecache: &mut NodeListCache
+) -> (SolveResult, usize) {
     // use board::LineMut;
-    match stupid_solver(b) {
+    match stupid_solver(b, nodecache) {
         Some(SolveResult::Success) => {
             return (SolveResult::Success, 1);
         }
@@ -234,7 +261,7 @@ pub fn stupid_branched_solver(b: &mut board::Board) -> (SolveResult, usize) {
                 // First, try 0
                 let mut new_board = b.clone();
                 new_board.set_cell_index(index, board::Cell::Empty);
-                let (empty_result, empty_b) = stupid_branched_solver(&mut new_board);
+                let (empty_result, empty_b) = stupid_branched_solver(&mut new_board, nodecache);
                 nbranches += empty_b;
                 if empty_result == SolveResult::Success {
                     mem::swap(b, &mut new_board);
@@ -243,7 +270,7 @@ pub fn stupid_branched_solver(b: &mut board::Board) -> (SolveResult, usize) {
                     // Now, try 1
                     let mut new_board = b.clone();
                     new_board.set_cell_index(index, board::Cell::Filled);
-                    let (filled_result, filled_b) = stupid_branched_solver(&mut new_board);
+                    let (filled_result, filled_b) = stupid_branched_solver(&mut new_board, nodecache);
                     nbranches += filled_b;
                     if filled_result == SolveResult::Success {
                         mem::swap(b, &mut new_board);
@@ -275,7 +302,8 @@ pub fn stupid_branched_solver_set(b: &mut board::Board) -> (SolveResult, usize) 
         });
     }
     let mut n_branches = 0;
-    let value = _stupid_branched_solver_set(b, &mut meta, &mut to_solve, &mut n_branches);
+    let mut nodecache = make_node_list_cache(b);
+    let value = _stupid_branched_solver_set(b, &mut meta, &mut to_solve, &mut n_branches, &mut nodecache);
     (value, n_branches)
 }
 
@@ -283,11 +311,12 @@ fn _stupid_branched_solver_set(
     b: &mut board::Board,
     meta: &mut BoardMeta,
     to_solve: &mut PrioritySet<LineInfo>,
-    num_branches: &mut usize
+    num_branches: &mut usize,
+    nodecache: &mut NodeListCache
 ) -> SolveResult {
     util::inc_maybe_print(num_branches, 1, 100);
     // use board::LineMut;
-    match stupid_solver_set(b, meta, to_solve) {
+    match stupid_solver_set(b, meta, to_solve, nodecache) {
         Some(SolveResult::Success) => {
             return SolveResult::Success;
         }
@@ -297,7 +326,15 @@ fn _stupid_branched_solver_set(
         None => {
             // get first index that is unknown
             let index = (0..b.get_num_cells())
-                .find(|i| b.get_cell_index(*i) == board::Cell::Unknown);
+                .filter(|i| b.get_cell_index(*i) == board::Cell::Unknown)
+                .min_by_key(|i| {
+                    // sum number of known cells in same row and column
+                    let (col, row) = b.get_coordinate(*i);
+                    let mut sum = 0usize;
+                    sum += meta.unsolved_per_row[row as usize];
+                    sum += meta.unsolved_per_column[col as usize];
+                    sum
+                });
             if let Some(index) = index {
                 // First, insert indices into to_solve
                 let (col_i, row_i) = b.get_coordinate(index);
@@ -317,7 +354,8 @@ fn _stupid_branched_solver_set(
                     &mut new_board,
                     &mut meta.clone(), // clone data
                     &mut to_solve.clone(),
-                    num_branches
+                    num_branches,
+                    nodecache
                 );
                 if empty_result == SolveResult::Success {
                     mem::swap(b, &mut new_board);
@@ -330,7 +368,8 @@ fn _stupid_branched_solver_set(
                         &mut new_board,
                         meta, // no clone needed
                         to_solve,
-                        num_branches
+                        num_branches,
+                        nodecache
                     );
                     if filled_result == SolveResult::Success {
                         mem::swap(b, &mut new_board);
