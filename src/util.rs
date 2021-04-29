@@ -1,5 +1,5 @@
-use std::fmt;
 use std::collections::BTreeMap;
+use std::fmt;
 
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₙ
@@ -37,7 +37,10 @@ impl<T> EdgeList<T> {
     }
 }
 
-impl<T> fmt::Display for EdgeList<T> where T: fmt::Display {
+impl<T> fmt::Display for EdgeList<T>
+where
+    T: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for k in 0..self.size {
             for j in 0..self.size {
@@ -61,7 +64,7 @@ impl<T> fmt::Display for EdgeList<T> where T: fmt::Display {
 pub struct NodeList<T> {
     items: Vec<T>,
     width: usize,
-    height: usize
+    height: usize,
 }
 
 impl<T> NodeList<T> {
@@ -89,7 +92,10 @@ impl<T> NodeList<T> {
     }
 }
 
-impl<T> fmt::Display for NodeList<T> where T: fmt::Display {
+impl<T> fmt::Display for NodeList<T>
+where
+    T: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for j in 0..self.width {
             for k in 0..self.height {
@@ -127,13 +133,15 @@ impl<T> fmt::Display for NodeList<T> where T: fmt::Display {
 
 #[derive(Clone)]
 pub struct PrioritySet<T>
-where T: Clone + PartialOrd + Ord + PartialEq + Eq
+where
+    T: Clone + PartialOrd + Ord + PartialEq + Eq,
 {
-    pub elements: BTreeMap<T, u32>
+    pub elements: BTreeMap<T, u32>,
 }
 
 impl<T> PrioritySet<T>
-where T: Clone + PartialOrd + Ord + PartialEq + Eq
+where
+    T: Clone + PartialOrd + Ord + PartialEq + Eq,
 {
     pub fn insert(&mut self, value: T) {
         let entry = self.elements.entry(value).or_insert(0);
@@ -147,9 +155,10 @@ where T: Clone + PartialOrd + Ord + PartialEq + Eq
 
     pub fn pop(&mut self) -> Option<T> {
         // kinda inefficient since it's O(n), but what you gonna do about it
-        let index = self.elements.iter().max_by(|(ak, av), (bk, bv)| {
-            av.cmp(bv).then_with(|| ak.cmp(bk))
-        });
+        let index = self
+            .elements
+            .iter()
+            .max_by(|(ak, av), (bk, bv)| av.cmp(bv).then_with(|| ak.cmp(bk)));
         index.map(|i| i.0.clone()).map(|i| {
             self.elements.remove(&i);
             i
@@ -162,7 +171,7 @@ where T: Clone + PartialOrd + Ord + PartialEq + Eq
 
     pub fn new() -> PrioritySet<T> {
         PrioritySet {
-            elements: BTreeMap::new()
+            elements: BTreeMap::new(),
         }
     }
 }
