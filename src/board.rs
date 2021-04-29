@@ -102,6 +102,49 @@ impl Constraint {
     }
 }
 
+/// Given a list of individual nodes,
+/// find all nodes which can be used to reach from start to end.
+fn find_full_paths<T>(
+    i: usize,
+    j: usize,
+    w: usize,
+    h: usize,
+    nodelist: &util::NodeList<bool>,
+    determined: &mut util::NodeList<Option<bool>>,
+    c: &ConstraintList,
+    line: &T
+) -> bool
+    where T: LineRef
+{
+    // Each node will be determined at most once, so this is guaranteed at most O(n^2)
+    if let Some(value) = *determined.get(i, j) {
+	// this node has already been determined.
+	value
+    } else {
+	if *nodelist.get(i, j) {
+	    if i == w-1 {
+		// last node is destination
+		determined.set(i, j, Some(true));
+		true
+	    } else {
+		let mut v = false;
+		// determine if any children reach end
+		for k in j..h {
+		    if determine_edge(i, j, k, c, line) {
+			v |= find_full_paths(i+1, k, w, h, nodelist, determined, c, line);
+		    }
+		}
+		determined.set(i, j, Some(v));
+		v
+	    }
+	} else {
+	    // this node can not possibly be used
+	    determined.set(i, j, Some(false));
+	    false
+	}
+    }
+}
+
 /// A type used to represent a list of constraints on a row or column
 pub type ConstraintList = Vec<Constraint>;
 
@@ -113,11 +156,24 @@ pub trait LineMut : LineRef {
     /// Guarnatees that the line will be solved to its fullest extent
     /// Returns None if a contradiction was found
     /// Returns Some(Vec<Unit>) with a list of cells that were modified
-    fn try_solve_line_complete(&mut self, nodelistcache: &mut util::NodeList<bool>) -> Option<Vec<Unit>> {
-        /*let c = self.get_constraints();
+    fn try_solve_line_complete(&mut self, nodelist: &mut util::NodeList<bool>) -> Option<Vec<Unit>> {
+        let c = self.get_constraints();
+        let mut ret = Vec::new();
         // special case: no constraints
         if c.len() == 0 {
-            return (0..self.size()).all(|i| self.get_cell(i) != Cell::Filled);
+            for i in 0..self.size() {
+                match self.get_cell(i) {
+                    Cell::Unknown => {
+                        ret.push(i);
+                        self.set_cell(i, Cell::Empty);
+                    },
+                    Cell::Filled => {
+                        return None;
+                    },
+                    Cell::Empty => {}
+                }
+            }
+            return Some(ret);
         }
         let c_sum: usize = c.iter().map(|x| x.get_length() as usize).sum();
         let extra_space = self.size() as usize + 1 - c_sum - c.len();
@@ -126,7 +182,6 @@ pub trait LineMut : LineRef {
         // For each node NODE[i, j]:
         // [i] is the constraint index
         // [j] is the permutation
-        let mut nodelist = util::NodeList::<bool>::new(num_nodes_width, num_nodes_height);
         // Determine viability of each node
         for i in 0..num_nodes_width {
             let (left, _right) = get_constraint_bounds(&c, i);
@@ -155,71 +210,93 @@ pub trait LineMut : LineRef {
                 nodelist.set(i, j, nodevalue);
             }
         }
-        // for each node:
-        // NODE[i,j] = NODE[i,j] && ∃ (EDGE[i,j,k] && NODE[i+1,k])
-        // Perform this in reverse order
-        // Skip nodes on bottom rung
-        for i in (0..num_nodes_width - 1).rev() {
-            for j in 0..num_nodes_height {
-                let pvalue = *nodelist.get(i, j);
-                if pvalue {
-                    let mut edgevalue = false;
-                    for k in j..num_nodes_height {
-                        if !*nodelist.get(i+1, k) {
-                            continue;
-                        }
-                        // determine viability of edge
-                        // For each edge list EDGE[i][j, k]:
-                        // Represents edge from NODE[i, j] to NODE[i+1, k] where k >= j
-                        let edgev = determine_edge(i, j, k, &c, self);
-                        if edgev {
-                            edgevalue = true;
-                            break;
-                        }
-                    }
-                    nodelist.set(i, j, edgevalue);
-                } else {
-                    nodelist.set(i, j, false);
-                }
-            }
-        }*/
-        let mut ret = Vec::new();
-        if self.get_constraints().len() == 0 {
-            for i in 0..self.size() {
-                match self.get_cell(i) {
-                    Cell::Unknown => {
-                        ret.push(i);
-                        self.set_cell(i, Cell::Empty);
-                    },
-                    Cell::Filled => {
-                        return None;
-                    },
-                    Cell::Empty => {}
-                }
-            }
-            return Some(ret);
-        };
-        for i in 0..self.size() {
-            if self.get_cell(i) == Cell::Unknown {
-                self.set_cell(i, Cell::Filled);
-                let can_solve_filled = self.is_solvable(nodelistcache);
-                self.set_cell(i, Cell::Empty);
-                let can_solve_empty = self.is_solvable(nodelistcache);
-                if can_solve_filled && !can_solve_empty {
-                    self.set_cell(i, Cell::Filled);
-                    ret.push(i);
-                } else if can_solve_empty && !can_solve_filled {
-                    self.set_cell(i, Cell::Empty); // (Unneeded, cell is already set to Empty)
-                    ret.push(i);
-                } else if !can_solve_empty && !can_solve_filled {
-                    return None;
-                } else {
-                    self.set_cell(i, Cell::Unknown);
-                }
-            }
+	// determine which nodes can form a full path
+        let mut determined = self.make_empty_node_list::<Option<bool>>();
+        for j in 0..num_nodes_height {
+            find_full_paths(0, j, num_nodes_width, num_nodes_height, &nodelist, &mut determined, c, self);
         }
-        Some(ret)
-        // unimplemented!()
+	// determine which cells can be set to certain values
+	let mut node_values = vec![(false, false); self.size() as usize];
+	// Iterate through each node
+	for i in 0..num_nodes_width {
+	    for j in 0..num_nodes_height {
+		if let Some(true) = *determined.get(i, j) {
+		    let (start, end) = get_node_range(i, j, &c);
+		    if i == 0 {
+			for k in 0..start {
+			    node_values[k].0 = true;
+			}
+		    } else if start > 0 {
+			node_values[start-1].0 = true;
+		    }
+		    if i == num_nodes_width - 1 {
+			for k in end..self.size() as usize {
+			    node_values[k].0 = true;
+			}
+		    } else if end < self.size() as usize {
+			node_values[end].0 = true;
+		    }
+		    for k in start..end {
+			node_values[k].1 = true;
+		    }
+		    if i < num_nodes_width - 1 {
+			// handle longest edge
+			let k = (j..num_nodes_height).filter(|k| *determined.get(i+1, *k) == Some(true)).max().unwrap();
+			if let Some((estart, eend)) = get_edge_range(i, j, k, c) {
+			    for l in estart..eend {
+				node_values[l].0 = true;
+			    }
+			}
+		    }
+		}
+	    }
+	}
+	for (i, (c0, c1)) in node_values.iter().enumerate() {
+	    if *c0 && !*c1 {
+		match self.get_cell(i as Unit) {
+		    Cell::Empty => {},
+		    Cell::Filled => return None,
+		    Cell::Unknown => {
+			self.set_cell(i as Unit, Cell::Empty);
+			ret.push(i as Unit);
+		    }
+		}
+	    } else if !*c0 && *c1 {
+		match self.get_cell(i as Unit) {
+		    Cell::Filled => {},
+		    Cell::Empty => return None,
+		    Cell::Unknown => {
+			self.set_cell(i as Unit, Cell::Filled);
+			ret.push(i as Unit);
+		    }
+		}
+	    } else if !*c0 && !*c1 {
+		return None;
+	    }
+	}
+	Some(ret)
+    }
+}
+
+fn get_node_range(i: usize, j: usize, c: &ConstraintList) -> (usize, usize)
+{
+    let value = c[i].get_length();
+    let (left, _right) = get_constraint_bounds(&c, i);
+    (left + j, left + j + value as usize)
+}
+
+fn get_edge_range(i: usize, j: usize, k: usize, c: &ConstraintList) -> Option<(usize, usize)> {
+    if k <= j + 1 {
+	None
+    } else {
+        let (left, _right) = get_constraint_bounds(&c, i);
+        let i0_value = c[i].get_length() as usize;
+        // let i2 = i1 + 1;
+        // from NODE[i,j] to NODE[i+1,k] where k >= j
+        let pos = left + i0_value + j + 1;
+        // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
+        let width = k - j - 1;
+	Some((pos, pos+width))
     }
 }
 
@@ -351,16 +428,16 @@ pub trait LineRef : fmt::Display + Sized {
         }
         return true;
     }
-    fn make_empty_node_list(&self) -> util::NodeList<bool> {
+    fn make_empty_node_list<T: Default + Clone>(&self) -> util::NodeList<T> {
         let c = self.get_constraints();
         if c.len() == 0 {
-            util::NodeList::<bool>::new(0, 0)
+            util::NodeList::<T>::new(0, 0)
         } else {
             let c_sum: usize = c.iter().map(|x| x.get_length() as usize).sum();
             let extra_space = self.size() as usize + 1 - c_sum - c.len();
             let num_nodes_width = c.len();
             let num_nodes_height = extra_space + 1;
-            util::NodeList::<bool>::new(num_nodes_width, num_nodes_height)
+            util::NodeList::<T>::new(num_nodes_width, num_nodes_height)
         }
     }
     /// Determine whether this line is solvable given its constraints

@@ -1,6 +1,5 @@
 use std::fmt;
 use std::collections::BTreeMap;
-use std::cmp::Ordering;
 
 /// A 2D square list of nodes visualized as such:
 /// A₁,₁ A₁,₂ … A₁,ₙ
