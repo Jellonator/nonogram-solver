@@ -1,7 +1,7 @@
 #![allow(unused_macros)]
 pub mod board;
-pub mod util;
 pub mod solver;
+pub mod util;
 use std::fs;
 use std::io;
 
@@ -62,5 +62,5 @@ fn main() {
 // 803
 // 2040
 // 5341
-// 
+//
 // 6574 - solves in about 2 minutes with 32k branches

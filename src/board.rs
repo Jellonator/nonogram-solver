@@ -112,36 +112,37 @@ fn find_full_paths<T>(
     nodelist: &util::NodeList<bool>,
     determined: &mut util::NodeList<Option<bool>>,
     c: &ConstraintList,
-    line: &T
+    line: &T,
 ) -> bool
-    where T: LineRef
+where
+    T: LineRef,
 {
     // Each node will be determined at most once, so this is guaranteed at most O(n^2)
     if let Some(value) = *determined.get(i, j) {
-	// this node has already been determined.
-	value
+        // this node has already been determined.
+        value
     } else {
-	if *nodelist.get(i, j) {
-	    if i == w-1 {
-		// last node is destination
-		determined.set(i, j, Some(true));
-		true
-	    } else {
-		let mut v = false;
-		// determine if any children reach end
-		for k in j..h {
-		    if determine_edge(i, j, k, c, line) {
-			v |= find_full_paths(i+1, k, w, h, nodelist, determined, c, line);
-		    }
-		}
-		determined.set(i, j, Some(v));
-		v
-	    }
-	} else {
-	    // this node can not possibly be used
-	    determined.set(i, j, Some(false));
-	    false
-	}
+        if *nodelist.get(i, j) {
+            if i == w - 1 {
+                // last node is destination
+                determined.set(i, j, Some(true));
+                true
+            } else {
+                let mut v = false;
+                // determine if any children reach end
+                for k in j..h {
+                    if determine_edge(i, j, k, c, line) {
+                        v |= find_full_paths(i + 1, k, w, h, nodelist, determined, c, line);
+                    }
+                }
+                determined.set(i, j, Some(v));
+                v
+            }
+        } else {
+            // this node can not possibly be used
+            determined.set(i, j, Some(false));
+            false
+        }
     }
 }
 
@@ -149,27 +150,31 @@ fn find_full_paths<T>(
 pub type ConstraintList = Vec<Constraint>;
 
 /// A mutable reference on a board's row or column
-pub trait LineMut : LineRef {
+pub trait LineMut: LineRef {
     /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
     /// Solve by contradiction
     /// Guarnatees that the line will be solved to its fullest extent
     /// Returns None if a contradiction was found
     /// Returns Some(Vec<Unit>) with a list of cells that were modified
-    fn try_solve_line_complete(&mut self, nodelist: &mut util::NodeList<bool>) -> Option<Vec<Unit>> {
+    fn try_solve_line_complete(
+        &mut self,
+        nodelist: &mut util::NodeList<bool>,
+    ) -> Option<Vec<Unit>> {
         let c = self.get_constraints();
         let mut ret = Vec::new();
         // special case: no constraints
         if c.len() == 0 {
+            // Every cell must be empty
             for i in 0..self.size() {
                 match self.get_cell(i) {
                     Cell::Unknown => {
                         ret.push(i);
                         self.set_cell(i, Cell::Empty);
-                    },
+                    }
                     Cell::Filled => {
                         return None;
-                    },
+                    }
                     Cell::Empty => {}
                 }
             }
@@ -182,7 +187,8 @@ pub trait LineMut : LineRef {
         // For each node NODE[i, j]:
         // [i] is the constraint index
         // [j] is the permutation
-        // Determine viability of each node
+        // NODE[i, 0] represents the first possible position that the constraint 'j' can be placed.
+        // Determine whether each node can be placed on the board.
         for i in 0..num_nodes_width {
             let (left, _right) = get_constraint_bounds(&c, i);
             let value = c[i].get_length();
@@ -190,7 +196,7 @@ pub trait LineMut : LineRef {
                 let mut nodevalue = self.can_fit_constraint((left + j) as Unit, value);
                 // If first node, check that everything to left can be 0
                 if nodevalue && i == 0 && j > 1 {
-                    for q in 0..(j-1) {
+                    for q in 0..(j - 1) {
                         if self.get_cell(q as Unit) == Cell::Filled {
                             nodevalue = false;
                             break;
@@ -198,8 +204,9 @@ pub trait LineMut : LineRef {
                     }
                 }
                 // If last node, check that everything to right can be 0
-                if nodevalue && i == num_nodes_width-1 && j+2 < num_nodes_height {
-                    for q in (self.size() as usize-num_nodes_height+j+2)..self.size() as usize {
+                if nodevalue && i == num_nodes_width - 1 && j + 2 < num_nodes_height {
+                    for q in (self.size() as usize - num_nodes_height + j + 2)..self.size() as usize
+                    {
                         if self.get_cell(q as Unit) == Cell::Filled {
                             nodevalue = false;
                             break;
@@ -210,76 +217,108 @@ pub trait LineMut : LineRef {
                 nodelist.set(i, j, nodevalue);
             }
         }
-	// determine which nodes can form a full path
+        // determine which nodes can form a full path.
+        // That is, for every full path from a NODE[0, j] to NODE[width-1, k] (where k>=j),
+        // every node between them is marked as Some(true).
+        // Nodes that can not be used as a full path are marked as Some(false),
+        // and nodes that are never visited are marked as None.
         let mut determined = self.make_empty_node_list::<Option<bool>>();
         for j in 0..num_nodes_height {
-            find_full_paths(0, j, num_nodes_width, num_nodes_height, &nodelist, &mut determined, c, self);
+            // Try to find all full paths from NODE[0, j] to some end node
+            find_full_paths(
+                0,
+                j,
+                num_nodes_width,
+                num_nodes_height,
+                &nodelist,
+                &mut determined,
+                c,
+                self,
+            );
         }
-	// determine which cells can be set to certain values
-	let mut node_values = vec![(false, false); self.size() as usize];
-	// Iterate through each node
-	for i in 0..num_nodes_width {
-	    for j in 0..num_nodes_height {
-		if let Some(true) = *determined.get(i, j) {
-		    let (start, end) = get_node_range(i, j, &c);
-		    if i == 0 {
-			for k in 0..start {
-			    node_values[k].0 = true;
-			}
-		    } else if start > 0 {
-			node_values[start-1].0 = true;
-		    }
-		    if i == num_nodes_width - 1 {
-			for k in end..self.size() as usize {
-			    node_values[k].0 = true;
-			}
-		    } else if end < self.size() as usize {
-			node_values[end].0 = true;
-		    }
-		    for k in start..end {
-			node_values[k].1 = true;
-		    }
-		    if i < num_nodes_width - 1 {
-			// handle longest edge
-			let k = (j..num_nodes_height).filter(|k| *determined.get(i+1, *k) == Some(true)).max().unwrap();
-			if let Some((estart, eend)) = get_edge_range(i, j, k, c) {
-			    for l in estart..eend {
-				node_values[l].0 = true;
-			    }
-			}
-		    }
-		}
-	    }
-	}
-	for (i, (c0, c1)) in node_values.iter().enumerate() {
-	    if *c0 && !*c1 {
-		match self.get_cell(i as Unit) {
-		    Cell::Empty => {},
-		    Cell::Filled => return None,
-		    Cell::Unknown => {
-			self.set_cell(i as Unit, Cell::Empty);
-			ret.push(i as Unit);
-		    }
-		}
-	    } else if !*c0 && *c1 {
-		match self.get_cell(i as Unit) {
-		    Cell::Filled => {},
-		    Cell::Empty => return None,
-		    Cell::Unknown => {
-			self.set_cell(i as Unit, Cell::Filled);
-			ret.push(i as Unit);
-		    }
-		}
-	    } else if !*c0 && !*c1 {
-		return None;
-	    }
-	}
-	Some(ret)
+        // determine which cells can be set to certain values
+        let mut node_values = vec![(false, false); self.size() as usize];
+        // Iterate through each valid node
+        for i in 0..num_nodes_width {
+            for j in 0..num_nodes_height {
+                if let Some(true) = *determined.get(i, j) {
+                    // find the range of cells for this node
+                    let (start, end) = get_node_range(i, j, &c);
+                    if i == 0 {
+                        // If this is the first constraint, then mark every cell
+                        // to the left of it as able to be empty
+                        for k in 0..start {
+                            node_values[k].0 = true;
+                        }
+                    } else if start > 0 {
+                        // otherwise, mark the cell immediately before this
+                        // constraint as able to be empty.
+                        node_values[start - 1].0 = true;
+                    }
+                    if i == num_nodes_width - 1 {
+                        // If this is the last constraint,
+                        // mark every cell to the right of it as able to be empty.
+                        for k in end..self.size() as usize {
+                            node_values[k].0 = true;
+                        }
+                    } else if end < self.size() as usize {
+                        // otherwise, mark the cell immediately after this
+                        // constraint as able to be empty.
+                        node_values[end].0 = true;
+                    }
+                    // Mark every cell in the constraint as able to be filled.
+                    for k in start..end {
+                        node_values[k].1 = true;
+                    }
+                    if i < num_nodes_width - 1 {
+                        // If this is not the last constraint, find the following valid constraint with the longest edge.
+                        let k = (j..num_nodes_height)
+                            .filter(|k| *determined.get(i + 1, *k) == Some(true))
+                            .max()
+                            .unwrap();
+                        // Then, mark every cell between this and the longest edge as able to be empty.
+                        if let Some((estart, eend)) = get_edge_range(i, j, k, c) {
+                            for l in estart..eend {
+                                node_values[l].0 = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (i, (can_be_empty, can_be_filled)) in node_values.iter().enumerate() {
+            if *can_be_empty && !*can_be_filled {
+                match self.get_cell(i as Unit) {
+                    Cell::Empty => {}
+                    // error if can't be filled, but cell is currently filled (probably can't happen)
+                    Cell::Filled => return None, 
+                    Cell::Unknown => {
+                        // Set this cell as empty
+                        self.set_cell(i as Unit, Cell::Empty);
+                        ret.push(i as Unit);
+                    }
+                }
+            } else if !*can_be_empty && *can_be_filled {
+                match self.get_cell(i as Unit) {
+                    Cell::Filled => {}
+                    // error if can't be empty, but cell is currently empty (probably can't happen)
+                    Cell::Empty => return None,
+                    Cell::Unknown => {
+                        // Set this cell as filled
+                        self.set_cell(i as Unit, Cell::Filled);
+                        ret.push(i as Unit);
+                    }
+                }
+            } else if !*can_be_empty && !*can_be_filled {
+                // Error if no possible value for cell
+                return None;
+            }
+        }
+        Some(ret)
     }
 }
 
-fn get_node_range(i: usize, j: usize, c: &ConstraintList) -> (usize, usize)
-{
+fn get_node_range(i: usize, j: usize, c: &ConstraintList) -> (usize, usize) {
     let value = c[i].get_length();
     let (left, _right) = get_constraint_bounds(&c, i);
     (left + j, left + j + value as usize)
@@ -287,7 +326,7 @@ fn get_node_range(i: usize, j: usize, c: &ConstraintList) -> (usize, usize)
 
 fn get_edge_range(i: usize, j: usize, k: usize, c: &ConstraintList) -> Option<(usize, usize)> {
     if k <= j + 1 {
-	None
+        None
     } else {
         let (left, _right) = get_constraint_bounds(&c, i);
         let i0_value = c[i].get_length() as usize;
@@ -296,7 +335,7 @@ fn get_edge_range(i: usize, j: usize, k: usize, c: &ConstraintList) -> Option<(u
         let pos = left + i0_value + j + 1;
         // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
         let width = k - j - 1;
-	Some((pos, pos+width))
+        Some((pos, pos + width))
     }
 }
 
@@ -313,7 +352,7 @@ fn determine_edge<T: LineRef>(i: usize, j: usize, k: usize, c: &ConstraintList, 
         let pos = left + i0_value + j + 1;
         // check that gap between A[i,j] and A[i+1,k] is able to be all 0s
         let width = k - j - 1;
-        (pos..pos+width).all(|x| line.get_cell(x as Unit) != Cell::Filled)
+        (pos..pos + width).all(|x| line.get_cell(x as Unit) != Cell::Filled)
     }
 }
 
@@ -356,11 +395,11 @@ fn determine_edge<T: LineRef>(i: usize, j: usize, k: usize, c: &ConstraintList, 
     }
     return false;
     // set value
-    
+
 }*/
 
 /// A reference on a board's row or column
-pub trait LineRef : fmt::Display + Sized {
+pub trait LineRef: fmt::Display + Sized {
     /// Get the length of this line
     fn size(&self) -> Unit;
     /// Get a cell value from this line
@@ -421,7 +460,7 @@ pub trait LineRef : fmt::Display + Sized {
             }
         }
         // check inner cells
-        for i in pos..(pos+len) {
+        for i in pos..(pos + len) {
             if self.get_cell(i) == Cell::Empty {
                 return false;
             }
@@ -462,7 +501,7 @@ pub trait LineRef : fmt::Display + Sized {
                 let mut nodevalue = self.can_fit_constraint((left + j) as Unit, value);
                 // If first node, check that everything to left can be 0
                 if nodevalue && i == 0 && j > 1 {
-                    for q in 0..(j-1) {
+                    for q in 0..(j - 1) {
                         if self.get_cell(q as Unit) == Cell::Filled {
                             nodevalue = false;
                             break;
@@ -470,8 +509,9 @@ pub trait LineRef : fmt::Display + Sized {
                     }
                 }
                 // If last node, check that everything to right can be 0
-                if nodevalue && i == num_nodes_width-1 && j+2 < num_nodes_height {
-                    for q in (self.size() as usize-num_nodes_height+j+2)..self.size() as usize {
+                if nodevalue && i == num_nodes_width - 1 && j + 2 < num_nodes_height {
+                    for q in (self.size() as usize - num_nodes_height + j + 2)..self.size() as usize
+                    {
                         if self.get_cell(q as Unit) == Cell::Filled {
                             nodevalue = false;
                             break;
@@ -492,7 +532,7 @@ pub trait LineRef : fmt::Display + Sized {
                 if pvalue {
                     let mut edgevalue = false;
                     for k in j..num_nodes_height {
-                        if !*nodelist.get(i+1, k) {
+                        if !*nodelist.get(i + 1, k) {
                             continue;
                         }
                         // determine viability of edge
@@ -664,7 +704,7 @@ impl Board {
     pub fn get_coordinate(&self, index: usize) -> (Unit, Unit) {
         (
             (index % (self.width as usize)) as Unit,
-            (index / (self.width as usize)) as Unit
+            (index / (self.width as usize)) as Unit,
         )
     }
 
@@ -864,12 +904,7 @@ impl fmt::Display for Board {
             write!(f, "| ")?;
             for col in 0..self.width {
                 let q = format!("{}", self.get_cell(col, row));
-                write!(
-                    f,
-                    "{:>width$} ",
-                    q,
-                    width = col_item_width
-                )?;
+                write!(f, "{:>width$} ", q, width = col_item_width)?;
             }
             write!(f, "\n")?;
         }
@@ -995,10 +1030,7 @@ pub struct StandaloneLine<'a> {
 
 impl<'a> StandaloneLine<'a> {
     pub fn new(data: Vec<Cell>, constraints: &ConstraintList) -> StandaloneLine {
-        StandaloneLine {
-            constraints,
-            data
-        }
+        StandaloneLine { constraints, data }
     }
 }
 
@@ -1081,4 +1113,3 @@ impl<'a> fmt::Display for StandaloneLine<'a> {
         self.do_fmt(f)
     }
 }
-
