@@ -153,10 +153,11 @@ pub type ConstraintList = Vec<Constraint>;
 pub trait LineMut: LineRef {
     /// Set a cell's value on this line
     fn set_cell(&mut self, index: Unit, value: Cell);
-    /// Solve by contradiction
-    /// Guarnatees that the line will be solved to its fullest extent
-    /// Returns None if a contradiction was found
-    /// Returns Some(Vec<Unit>) with a list of cells that were modified
+    /// Solve this line to its fullest degree possible.
+    /// Returns None if a contradiction was found.
+    /// Otherwise, returns Some(Vec<Unit>) with a list of cells that were modified.
+    /// Uses a similar technique as LineRef::is_solvable, by treating constraints as
+    /// a graph of nodes (valid placements for each constraint) connected by edges (the gaps between constraints).
     fn try_solve_line_complete(
         &mut self,
         nodelist: &mut util::NodeList<bool>,
