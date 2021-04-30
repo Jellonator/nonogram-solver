@@ -356,48 +356,6 @@ fn determine_edge<T: LineRef>(i: usize, j: usize, k: usize, c: &ConstraintList, 
     }
 }
 
-/*fn determine_node<T: LineRef>(i: usize, j: usize, c: &ConstraintList, line: &T) -> bool {
-    let c_sum: usize = c.iter().map(|x| x.get_length() as usize).sum();
-    let extra_space = line.size() as usize + 1 - c_sum - c.len();
-    let num_nodes_width = c.len();
-    let num_nodes_height = extra_space + 1;
-    let (left, _right) = get_constraint_bounds(&c, i);
-    let value = c[i].get_length();
-    let nodevalue = line.can_fit_constraint((left + j) as Unit, value);
-    // If first node, check that everything to left can be 0
-    if nodevalue && i == 0 && j > 1 {
-        for q in 0..(j-1) {
-            if line.get_cell(q as Unit) == Cell::Filled {
-                return false;
-            }
-        }
-    }
-    // If last node, check that everything to right can be 0
-    if nodevalue && i == num_nodes_width-1 && j+2 < num_nodes_height {
-        for q in (line.size() as usize-num_nodes_height+j+2)..line.size() as usize {
-            if line.get_cell(q as Unit) == Cell::Filled {
-                return false;
-            }
-        }
-        return true;
-    }
-    for k in j..num_nodes_height {
-        if !determine_node(i+1, k, c, line) {
-            continue;
-        }
-        // determine viability of edge
-        // For each edge list EDGE[i][j, k]:
-        // Represents edge from NODE[i, j] to NODE[i+1, k] where k >= j
-        let edgev = determine_edge(i, j, k, &c, line);
-        if edgev {
-            return true;
-        }
-    }
-    return false;
-    // set value
-
-}*/
-
 /// A reference on a board's row or column
 pub trait LineRef: fmt::Display + Sized {
     /// Get the length of this line
