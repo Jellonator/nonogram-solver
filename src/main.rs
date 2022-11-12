@@ -50,7 +50,7 @@ fn main() {
     let puzzlef = fs::File::open(&args[1]).unwrap();
     let puzzlef = io::BufReader::new(puzzlef);
     let mut b = board::Board::read_csv_puzzle(puzzlef);
-    println!("{}", b.clone_without_constraints());
+    println!("{}", b);
     println!("{:?}", solver::stupid_branched_solver_set(&mut b));
     println!("{}x{}", b.get_width(), b.get_height());
     println!("{}", b.clone_without_constraints());

@@ -65,6 +65,15 @@ impl Cell {
             Cell::Unknown => -1,
         }
     }
+
+    pub fn get_format(&self) -> (&str,&str)
+    {
+        match *self {
+            Cell::Unknown => ("\x1B[41m", "\x1B[0m"),
+            Cell::Empty => ("", ""),
+            Cell::Filled => ("", ""),
+        }
+    }
 }
 
 impl fmt::Display for Cell {
@@ -73,7 +82,7 @@ impl fmt::Display for Cell {
             f,
             "{}",
             match *self {
-                Cell::Unknown => "\x1B[41m \x1B[0m",
+                Cell::Unknown => "?",
                 Cell::Empty => ".",
                 Cell::Filled => "X",
             }
@@ -862,8 +871,15 @@ impl fmt::Display for Board {
             }
             write!(f, "| ")?;
             for col in 0..self.width {
-                let q = format!("{}", self.get_cell(col, row));
-                write!(f, "{:>width$} ", q, width = col_item_width)?;
+                let cell = self.get_cell(col, row);
+                let (fmtstart, fmtend) = cell.get_format();
+                write!(
+                    f, 
+                    "{}{:>width$}{} ", 
+                    fmtstart,
+                    format!("{}", cell),
+                    fmtend,
+                    width = col_item_width)?;
             }
             write!(f, "\n")?;
         }
